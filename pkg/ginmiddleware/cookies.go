@@ -6,9 +6,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CookieConfig controls the names, paths, and lifetimes of the auth cookies
-// written by SetAuthCookies and ClearAuthCookies. Zero values are replaced
-// with the defaults listed on each field.
+// CookieConfig controls the names, paths, lifetimes, and security attributes
+// of the auth cookies written by SetAuthCookies and ClearAuthCookies. Zero
+// values are replaced with the defaults listed on each field.
 type CookieConfig struct {
 	// AccessTokenName is the cookie name for the access token.
 	// Default: "access_token".
@@ -30,6 +30,23 @@ type CookieConfig struct {
 	// RefreshTokenMaxAge is the Max-Age in seconds for the refresh token cookie.
 	// Default: 604800 (7 days).
 	RefreshTokenMaxAge int
+
+	// Secure sets the Secure attribute on all auth cookies. Default: true.
+	// Set to false only in local HTTP development — in production the Secure
+	// attribute must always be true so cookies are never sent over plaintext.
+	Secure bool
+
+	// secure tracks whether Secure was explicitly set by the caller.
+	secureSet bool
+}
+
+// WithSecure returns a copy of cfg with Secure set to v. Use this instead of
+// setting Secure directly so the zero value (false) can be distinguished from
+// an explicit opt-out.
+func (c CookieConfig) WithSecure(v bool) CookieConfig {
+	c.Secure = v
+	c.secureSet = true
+	return c
 }
 
 func (c *CookieConfig) withDefaults() CookieConfig {
@@ -49,6 +66,9 @@ func (c *CookieConfig) withDefaults() CookieConfig {
 	if out.RefreshTokenMaxAge == 0 {
 		out.RefreshTokenMaxAge = 604800
 	}
+	if !out.secureSet {
+		out.Secure = true
+	}
 	return out
 }
 
@@ -58,7 +78,8 @@ func (c *CookieConfig) withDefaults() CookieConfig {
 //   - Access token: Path=/, SameSite=Lax.
 //   - Refresh token: Path=cfg.RefreshTokenPath, SameSite=Strict (path-scoped
 //     so the browser only sends it to the token refresh endpoint).
-//   - Secure is set when the connection is TLS or X-Forwarded-Proto is "https".
+//   - Secure defaults to true. Set cfg.Secure = false (via CookieConfig.WithSecure)
+//     only in local HTTP development.
 //   - Cache-Control: no-store is set on the response — auth cookie responses
 //     must never be cached by an intermediary.
 //
@@ -66,7 +87,6 @@ func (c *CookieConfig) withDefaults() CookieConfig {
 // when issuing a new access token without rotating the refresh token.
 func SetAuthCookies(c *gin.Context, accessToken, refreshToken string, cfg CookieConfig) {
 	cfg = cfg.withDefaults()
-	secure := isSecure(c)
 	c.Header("Cache-Control", "no-store")
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     cfg.AccessTokenName,
@@ -74,7 +94,7 @@ func SetAuthCookies(c *gin.Context, accessToken, refreshToken string, cfg Cookie
 		Path:     "/",
 		MaxAge:   cfg.AccessTokenMaxAge,
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   cfg.Secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 	if refreshToken != "" {
@@ -84,7 +104,7 @@ func SetAuthCookies(c *gin.Context, accessToken, refreshToken string, cfg Cookie
 			Path:     cfg.RefreshTokenPath,
 			MaxAge:   cfg.RefreshTokenMaxAge,
 			HttpOnly: true,
-			Secure:   secure,
+			Secure:   cfg.Secure,
 			SameSite: http.SameSiteStrictMode,
 		})
 	}
@@ -95,14 +115,13 @@ func SetAuthCookies(c *gin.Context, accessToken, refreshToken string, cfg Cookie
 // discards them on the next response.
 func ClearAuthCookies(c *gin.Context, cfg CookieConfig) {
 	cfg = cfg.withDefaults()
-	secure := isSecure(c)
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     cfg.AccessTokenName,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   cfg.Secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.SetCookie(c.Writer, &http.Cookie{
@@ -111,13 +130,7 @@ func ClearAuthCookies(c *gin.Context, cfg CookieConfig) {
 		Path:     cfg.RefreshTokenPath,
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   cfg.Secure,
 		SameSite: http.SameSiteStrictMode,
 	})
-}
-
-// isSecure returns true when the connection is TLS or the request arrived via
-// an HTTPS proxy (X-Forwarded-Proto: https).
-func isSecure(c *gin.Context) bool {
-	return c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
 }
