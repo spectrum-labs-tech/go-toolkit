@@ -88,7 +88,7 @@ func (c *CookieConfig) withDefaults() CookieConfig {
 func SetAuthCookies(c *gin.Context, accessToken, refreshToken string, cfg CookieConfig) {
 	cfg = cfg.withDefaults()
 	c.Header("Cache-Control", "no-store")
-	http.SetCookie(c.Writer, &http.Cookie{
+	http.SetCookie(c.Writer, &http.Cookie{ //nolint:gosec // G124: Secure defaults to true; caller opts out explicitly via WithSecure(false) for local dev only
 		Name:     cfg.AccessTokenName,
 		Value:    accessToken,
 		Path:     "/",
@@ -98,7 +98,7 @@ func SetAuthCookies(c *gin.Context, accessToken, refreshToken string, cfg Cookie
 		SameSite: http.SameSiteLaxMode,
 	})
 	if refreshToken != "" {
-		http.SetCookie(c.Writer, &http.Cookie{
+		http.SetCookie(c.Writer, &http.Cookie{ //nolint:gosec // G124: Secure defaults to true; caller opts out explicitly via WithSecure(false) for local dev only
 			Name:     cfg.RefreshTokenName,
 			Value:    refreshToken,
 			Path:     cfg.RefreshTokenPath,
@@ -115,7 +115,7 @@ func SetAuthCookies(c *gin.Context, accessToken, refreshToken string, cfg Cookie
 // discards them on the next response.
 func ClearAuthCookies(c *gin.Context, cfg CookieConfig) {
 	cfg = cfg.withDefaults()
-	http.SetCookie(c.Writer, &http.Cookie{
+	http.SetCookie(c.Writer, &http.Cookie{ //nolint:gosec // G124: Secure defaults to true; caller opts out explicitly via WithSecure(false) for local dev only
 		Name:     cfg.AccessTokenName,
 		Value:    "",
 		Path:     "/",
@@ -124,7 +124,7 @@ func ClearAuthCookies(c *gin.Context, cfg CookieConfig) {
 		Secure:   cfg.Secure,
 		SameSite: http.SameSiteLaxMode,
 	})
-	http.SetCookie(c.Writer, &http.Cookie{
+	http.SetCookie(c.Writer, &http.Cookie{ //nolint:gosec // G124: Secure defaults to true; caller opts out explicitly via WithSecure(false) for local dev only
 		Name:     cfg.RefreshTokenName,
 		Value:    "",
 		Path:     cfg.RefreshTokenPath,
