@@ -112,6 +112,37 @@ func TestSetAuthCookies_CacheControlNoStore(t *testing.T) {
 	}
 }
 
+func TestSetAuthCookies_SecureDefault(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	ginmiddleware.SetAuthCookies(c, "at", "rt", ginmiddleware.CookieConfig{})
+
+	for _, cookie := range w.Result().Cookies() {
+		if !cookie.Secure {
+			t.Errorf("cookie %q: Secure should default to true", cookie.Name)
+		}
+	}
+}
+
+func TestSetAuthCookies_WithSecureFalse(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	cfg := ginmiddleware.CookieConfig{}.WithSecure(false)
+	ginmiddleware.SetAuthCookies(c, "at", "rt", cfg)
+
+	for _, cookie := range w.Result().Cookies() {
+		if cookie.Secure {
+			t.Errorf("cookie %q: Secure should be false when explicitly opted out", cookie.Name)
+		}
+	}
+}
+
 func TestClearAuthCookies(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()
