@@ -33,6 +33,11 @@ linters:
       - path: _test\.go
         linters:
           - gosec
+          - noctx  # httptest.NewRequest without context is standard in tests
+      - path: pkg/ginmiddleware/cookies\.go
+        linters:
+          - gosec
+        text: "G124"  # Secure attribute is set dynamically via isSecure(); false positive
 
 issues:
   max-issues-per-linter: 50
