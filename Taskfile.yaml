@@ -1,0 +1,37 @@
+version: "3"
+
+vars:
+  RACE: '{{.RACE | default "false"}}'
+
+tasks:
+  default:
+    desc: Run vet and unit tests
+    cmds:
+      - task: vet
+      - task: test
+
+  vet:
+    desc: Run go vet
+    cmd: go vet ./...
+
+  lint:
+    desc: Run golangci-lint
+    cmd: golangci-lint run ./...
+
+  test:
+    desc: Run unit tests
+    cmd: go test {{if eq .RACE "true"}}-race{{end}} -count=1 ./...
+
+  test/cover:
+    desc: Run unit tests with coverage report
+    cmds:
+      - go test {{if eq .RACE "true"}}-race{{end}} -count=1 -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+
+  fmt:
+    desc: Format source files
+    cmd: gofmt -w -s .
+
+  tidy:
+    desc: Tidy go module dependencies
+    cmd: go mod tidy
