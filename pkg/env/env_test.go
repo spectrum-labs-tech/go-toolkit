@@ -2,6 +2,7 @@ package env_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/spectrum-labs-tech/go-toolkit/pkg/env"
 )
@@ -29,6 +30,20 @@ func TestInt64(t *testing.T) {
 	t.Setenv("TOOLKIT_TEST_INT_BAD", "notanumber")
 	if got := env.Int64("TOOLKIT_TEST_INT_BAD", 7); got != 7 {
 		t.Errorf("bad value should return fallback, got %d", got)
+	}
+}
+
+func TestDuration(t *testing.T) {
+	t.Setenv("TOOLKIT_TEST_DUR", "30m")
+	if got := env.Duration("TOOLKIT_TEST_DUR", time.Second); got != 30*time.Minute {
+		t.Errorf("got %v, want 30m", got)
+	}
+	if got := env.Duration("TOOLKIT_TEST_DUR_MISSING", 5*time.Second); got != 5*time.Second {
+		t.Errorf("missing key should return fallback, got %v", got)
+	}
+	t.Setenv("TOOLKIT_TEST_DUR_BAD", "notaduration")
+	if got := env.Duration("TOOLKIT_TEST_DUR_BAD", 7*time.Second); got != 7*time.Second {
+		t.Errorf("bad value should return fallback, got %v", got)
 	}
 }
 

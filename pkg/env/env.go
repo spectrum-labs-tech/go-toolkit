@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Str returns the value of key, or fallback if the variable is unset or empty.
@@ -26,6 +27,18 @@ func Int64(key string, fallback int64) int64 {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return n
+		}
+	}
+	return fallback
+}
+
+// Duration returns the value of key parsed as a time.Duration, or fallback if
+// the variable is unset, empty, or not a valid duration. The accepted format is
+// that of time.ParseDuration (e.g. "5s", "30m", "1h30m").
+func Duration(key string, fallback time.Duration) time.Duration {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
 		}
 	}
 	return fallback
