@@ -218,6 +218,60 @@ func TestOAuthCode_RejectsRefreshToken(t *testing.T) {
 	}
 }
 
+func TestAccessToken_TenantID_RoundTrip(t *testing.T) {
+	t.Parallel()
+	mgr := newTestManager(t)
+
+	token, err := mgr.GenerateAccessToken("user-123", jwt.TokenOptions{TenantID: "tenant-abc"})
+	if err != nil {
+		t.Fatalf("GenerateAccessToken: %v", err)
+	}
+	claims, err := mgr.VerifyAccessToken(token)
+	if err != nil {
+		t.Fatalf("VerifyAccessToken: %v", err)
+	}
+	if claims.Subject != "user-123" {
+		t.Errorf("Subject = %q, want %q", claims.Subject, "user-123")
+	}
+	if claims.TenantID != "tenant-abc" {
+		t.Errorf("TenantID = %q, want %q", claims.TenantID, "tenant-abc")
+	}
+}
+
+func TestAccessToken_TenantID_AbsentWhenNotSet(t *testing.T) {
+	t.Parallel()
+	mgr := newTestManager(t)
+
+	token, err := mgr.GenerateAccessToken("user-123")
+	if err != nil {
+		t.Fatalf("GenerateAccessToken: %v", err)
+	}
+	claims, err := mgr.VerifyAccessToken(token)
+	if err != nil {
+		t.Fatalf("VerifyAccessToken: %v", err)
+	}
+	if claims.TenantID != "" {
+		t.Errorf("TenantID = %q, want empty", claims.TenantID)
+	}
+}
+
+func TestRefreshToken_TenantID_RoundTrip(t *testing.T) {
+	t.Parallel()
+	mgr := newTestManager(t)
+
+	token, err := mgr.GenerateRefreshToken("user-456", jwt.TokenOptions{TenantID: "tenant-xyz"})
+	if err != nil {
+		t.Fatalf("GenerateRefreshToken: %v", err)
+	}
+	claims, err := mgr.VerifyRefreshToken(token)
+	if err != nil {
+		t.Fatalf("VerifyRefreshToken: %v", err)
+	}
+	if claims.TenantID != "tenant-xyz" {
+		t.Errorf("TenantID = %q, want %q", claims.TenantID, "tenant-xyz")
+	}
+}
+
 func TestDefaultTTLs(t *testing.T) {
 	t.Parallel()
 	mgr, _ := jwt.New(jwt.Config{
