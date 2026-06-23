@@ -82,6 +82,24 @@ type Claims struct {
 	// JTI is the unique token identifier. Always non-empty; use it to detect
 	// replay of OAuth exchange codes.
 	JTI string
+
+	// TenantID is the value of the "tenant_id" claim. Empty when the token was
+	// issued without one — callers that do not use multi-tenancy can ignore it.
+	TenantID string
+}
+
+// TokenOptions carries optional per-token parameters. Pass a single TokenOptions
+// value to GenerateAccessToken or GenerateRefreshToken; fields at their zero
+// value are omitted from the token. When multiple values are supplied only the
+// first is used.
+type TokenOptions struct {
+	// TenantID is written as the "tenant_id" claim when non-empty. Tokens
+	// verified without a "tenant_id" claim return Claims.TenantID == "".
+	//
+	// The library writes and reads this claim but does not validate or enforce
+	// tenant isolation — it is the caller's responsibility to verify that the
+	// authenticated user belongs to the tenant in the token before granting access.
+	TenantID string
 }
 
 // Manager handles JWT generation and validation. Construct one with New and
@@ -128,9 +146,10 @@ func (m *Manager) AccessTokenTTL() time.Duration { return m.cfg.AccessTokenTTL }
 // RefreshTokenTTL returns the configured refresh token lifetime.
 func (m *Manager) RefreshTokenTTL() time.Duration { return m.cfg.RefreshTokenTTL }
 
-// GenerateAccessToken issues a signed access token for subject. Returns
-// ErrMissingSubject if subject is empty.
-func (m *Manager) GenerateAccessToken(subject string) (string, error) {
+// GenerateAccessToken issues a signed access token for subject. Pass an optional
+// TokenOptions to include extra claims such as TenantID. Returns ErrMissingSubject
+// if subject is empty.
+func (m *Manager) GenerateAccessToken(subject string, opts ...TokenOptions) (string, error) {
 	if subject == "" {
 		return "", ErrMissingSubject
 	}
@@ -143,6 +162,7 @@ func (m *Manager) GenerateAccessToken(subject string) (string, error) {
 		"iss": m.cfg.Issuer,
 		"aud": []string{m.cfg.Audience},
 	}
+	applyOptions(claims, opts)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(m.cfg.Secret)
 }
@@ -156,8 +176,9 @@ func (m *Manager) VerifyAccessToken(tokenString string) (Claims, error) {
 
 // GenerateRefreshToken issues a signed refresh token for subject. The token
 // carries a "purpose":"refresh" claim so it cannot be accepted by
-// VerifyAccessToken. Returns ErrMissingSubject if subject is empty.
-func (m *Manager) GenerateRefreshToken(subject string) (string, error) {
+// VerifyAccessToken. Pass an optional TokenOptions to include extra claims such
+// as TenantID. Returns ErrMissingSubject if subject is empty.
+func (m *Manager) GenerateRefreshToken(subject string, opts ...TokenOptions) (string, error) {
 	if subject == "" {
 		return "", ErrMissingSubject
 	}
@@ -171,6 +192,7 @@ func (m *Manager) GenerateRefreshToken(subject string) (string, error) {
 		"aud":     []string{m.cfg.Audience},
 		"purpose": "refresh",
 	}
+	applyOptions(claims, opts)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(m.cfg.Secret)
 }
@@ -186,6 +208,10 @@ func (m *Manager) VerifyRefreshToken(tokenString string) (Claims, error) {
 // subject. The code carries a unique JTI for replay detection; callers must
 // store and mark the JTI consumed on first use. Returns ErrMissingSubject if
 // subject is empty.
+//
+// OAuth exchange codes are intentionally narrow: they carry only subject and
+// JTI. Mint the resulting access/refresh tokens with TokenOptions if tenant
+// context is needed after the exchange.
 func (m *Manager) GenerateOAuthCode(subject string) (string, error) {
 	if subject == "" {
 		return "", ErrMissingSubject
@@ -214,6 +240,17 @@ func (m *Manager) VerifyOAuthCode(tokenString string) (subject, jti string, err 
 		return "", "", err
 	}
 	return claims.Subject, claims.JTI, nil
+}
+
+// applyOptions writes non-zero fields from opts[0] into claims. It is a no-op
+// when opts is empty.
+func applyOptions(claims jwt.MapClaims, opts []TokenOptions) {
+	if len(opts) == 0 {
+		return
+	}
+	if opts[0].TenantID != "" {
+		claims["tenant_id"] = opts[0].TenantID
+	}
 }
 
 // parse is the shared validation path. If purpose is non-empty the "purpose"
@@ -247,5 +284,6 @@ func (m *Manager) parse(tokenString, purpose string) (Claims, error) {
 		return Claims{}, ErrMissingSubject
 	}
 	jti, _ := mapClaims["jti"].(string)
-	return Claims{Subject: sub, JTI: jti}, nil
+	tenantID, _ := mapClaims["tenant_id"].(string)
+	return Claims{Subject: sub, JTI: jti, TenantID: tenantID}, nil
 }
