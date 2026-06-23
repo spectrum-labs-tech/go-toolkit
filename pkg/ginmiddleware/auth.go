@@ -14,6 +14,15 @@ const (
 	// ContextKeyUserID holds the authenticated user's subject (string).
 	ContextKeyUserID = "userID"
 
+	// ContextKeyTenantID holds the authenticated tenant id — the token's
+	// "tenant_id" claim (string) — and is set only when the token carries one.
+	// It is absent when the token has no tenant claim, so handlers should treat
+	// a missing value as "untenanted" rather than an error. Setting this claim
+	// does not enforce tenant isolation: it is the caller's responsibility to
+	// verify the authenticated user belongs to this tenant before granting
+	// access (see jwt.TokenOptions.TenantID).
+	ContextKeyTenantID = "tenantID"
+
 	// ContextKeyAuthViaCookie is set to true when the token was resolved from
 	// a cookie rather than an Authorization header. CSRFProtection checks this
 	// to decide whether to enforce the Origin header.
@@ -38,7 +47,8 @@ type AuthConfig struct {
 
 // AuthMiddleware requires a valid access token on every request. It resolves
 // the token from the Authorization: Bearer header first, then falls back to
-// AccessTokenCookie if configured. On success it sets ContextKeyUserID.
+// AccessTokenCookie if configured. On success it sets ContextKeyUserID, and
+// ContextKeyTenantID when the token carries a "tenant_id" claim.
 // Sets ContextKeyAuthViaCookie when the cookie path is used so that
 // CSRFProtection can enforce Origin on subsequent middleware.
 //
@@ -59,19 +69,17 @@ func AuthMiddleware(cfg AuthConfig) gin.HandlerFunc {
 			return
 		}
 
-		c.Set(ContextKeyUserID, claims.Subject)
-		if fromCookie {
-			c.Set(ContextKeyAuthViaCookie, true)
-		}
+		setIdentity(c, claims, fromCookie)
 		c.Next()
 	}
 }
 
 // OptionalAuthMiddleware parses the access token when present but does not
-// reject unauthenticated requests. Sets ContextKeyUserID when the token is
-// valid. Sets ContextKeyBearerPresent when a token is present but invalid,
-// allowing handlers to return 401 and trigger a client refresh flow rather
-// than silently treating the request as anonymous.
+// reject unauthenticated requests. Sets ContextKeyUserID (and ContextKeyTenantID
+// when the token carries a "tenant_id" claim) when the token is valid. Sets
+// ContextKeyBearerPresent when a token is present but invalid, allowing handlers
+// to return 401 and trigger a client refresh flow rather than silently treating
+// the request as anonymous.
 func OptionalAuthMiddleware(cfg AuthConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString, fromCookie := resolveToken(c, cfg.AccessTokenCookie)
@@ -82,12 +90,23 @@ func OptionalAuthMiddleware(cfg AuthConfig) gin.HandlerFunc {
 		c.Set(ContextKeyBearerPresent, true)
 		claims, err := cfg.Manager.VerifyAccessToken(tokenString)
 		if err == nil {
-			c.Set(ContextKeyUserID, claims.Subject)
-			if fromCookie {
-				c.Set(ContextKeyAuthViaCookie, true)
-			}
+			setIdentity(c, claims, fromCookie)
 		}
 		c.Next()
+	}
+}
+
+// setIdentity records the verified identity from claims onto the context: the
+// subject always, the tenant id only when the token carries one, and the
+// cookie-auth marker when the token came from a cookie. Shared by AuthMiddleware
+// and OptionalAuthMiddleware so both surface the same keys.
+func setIdentity(c *gin.Context, claims jwt.Claims, fromCookie bool) {
+	c.Set(ContextKeyUserID, claims.Subject)
+	if claims.TenantID != "" {
+		c.Set(ContextKeyTenantID, claims.TenantID)
+	}
+	if fromCookie {
+		c.Set(ContextKeyAuthViaCookie, true)
 	}
 }
 
