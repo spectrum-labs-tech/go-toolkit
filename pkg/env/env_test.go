@@ -1,6 +1,7 @@
 package env_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -80,4 +81,54 @@ func TestCSV(t *testing.T) {
 	if got := env.CSV("TOOLKIT_TEST_CSV_MISSING", ""); got != nil {
 		t.Errorf("empty fallback should return nil, got %v", got)
 	}
+}
+
+func TestRequire_AllSet(t *testing.T) {
+	t.Setenv("TOOLKIT_REQ_A", "value-a")
+	t.Setenv("TOOLKIT_REQ_B", "value-b")
+	// Should not panic.
+	env.Require("TOOLKIT_REQ_A", "TOOLKIT_REQ_B")
+}
+
+func TestRequire_MissingPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Error("expected panic, got none")
+		}
+	}()
+	env.Require("TOOLKIT_REQ_DEFINITELY_NOT_SET_XYZ")
+}
+
+func TestRequire_ReportsAllMissing(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic, got none")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("panic value is %T, want string", r)
+		}
+		if !strings.Contains(msg, "TOOLKIT_REQ_MISS_1") || !strings.Contains(msg, "TOOLKIT_REQ_MISS_2") {
+			t.Errorf("panic message %q should name all missing keys", msg)
+		}
+	}()
+	env.Require("TOOLKIT_REQ_MISS_1", "TOOLKIT_REQ_MISS_2")
+}
+
+func TestMustStr_Set(t *testing.T) {
+	t.Setenv("TOOLKIT_MUST_STR", "hello")
+	if got := env.MustStr("TOOLKIT_MUST_STR"); got != "hello" {
+		t.Errorf("got %q, want %q", got, "hello")
+	}
+}
+
+func TestMustStr_MissingPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("expected panic, got none")
+		}
+	}()
+	env.MustStr("TOOLKIT_MUST_STR_NOT_SET_XYZ")
 }

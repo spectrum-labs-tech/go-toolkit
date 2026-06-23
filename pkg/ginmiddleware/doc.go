@@ -1,6 +1,6 @@
 // Package ginmiddleware provides Gin middleware and helpers for common
 // web-service concerns: authentication, CSRF protection, auth cookie
-// management, HTTP cache headers, and per-IP rate limiting.
+// management, HTTP security headers, cache headers, and per-IP rate limiting.
 //
 // # Auth
 //
@@ -23,6 +23,14 @@
 // attribute is set automatically when the connection is TLS or X-Forwarded-Proto
 // is "https".
 //
+// # Security headers
+//
+// SecureHeaders sets defensive response headers (X-Frame-Options,
+// X-Content-Type-Options, Referrer-Policy, Strict-Transport-Security) with
+// safe defaults. HSTS is only emitted on HTTPS connections. Use WithCSP,
+// WithHSTS, WithoutHSTS, WithFrameOptions, WithReferrerPolicy, and
+// WithPermissionsPolicy to customise the defaults.
+//
 // # Cache headers
 //
 // SetCache, DefaultPublicCache, NoStore, and SetCacheMaxAge set Cache-Control
@@ -38,6 +46,7 @@
 //	mgr, _ := jwt.New(jwt.Config{...})
 //
 //	r := gin.New()
+//	r.Use(ginmiddleware.SecureHeaders())
 //	r.Use(ginmiddleware.AuthMiddleware(ginmiddleware.AuthConfig{
 //	    Manager:           mgr,
 //	    AccessTokenCookie: "access_token",

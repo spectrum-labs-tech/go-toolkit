@@ -82,3 +82,35 @@ func CSV(key, fallback string) []string {
 	}
 	return out
 }
+
+// Require panics if any of the listed environment variables is unset or empty.
+// Call it early in main() to catch missing configuration before the application
+// serves traffic. The panic message names every missing key so all problems are
+// visible at once rather than one per restart.
+//
+//	func main() {
+//	    env.Require("DATABASE_URL", "JWT_SECRET", "STRIPE_WEBHOOK_SECRET")
+//	    // ...
+//	}
+func Require(keys ...string) {
+	missing := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if os.Getenv(k) == "" {
+			missing = append(missing, k)
+		}
+	}
+	if len(missing) > 0 {
+		panic("required environment variables are not set: " + strings.Join(missing, ", "))
+	}
+}
+
+// MustStr returns the value of key or panics if the variable is unset or empty.
+// Use this when a single required variable must be read at a specific call site.
+// For validating a group of required keys at startup, prefer Require.
+func MustStr(key string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		panic("required environment variable is not set: " + key)
+	}
+	return v
+}
