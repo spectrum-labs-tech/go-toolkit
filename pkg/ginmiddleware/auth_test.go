@@ -81,6 +81,80 @@ func TestAuthMiddleware_CookieAllowed(t *testing.T) {
 	}
 }
 
+func TestAuthMiddleware_SetsTenantID(t *testing.T) {
+	t.Parallel()
+	mgr := newTestJWTManager(t)
+	token, _ := mgr.GenerateAccessToken("user-1", jwt.TokenOptions{TenantID: "tenant-x"})
+
+	router := gin.New()
+	router.Use(ginmiddleware.AuthMiddleware(ginmiddleware.AuthConfig{Manager: mgr}))
+	router.GET("/", func(c *gin.Context) {
+		tid, _ := c.Get(ginmiddleware.ContextKeyTenantID)
+		c.String(http.StatusOK, tid.(string))
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if w.Body.String() != "tenant-x" {
+		t.Errorf("tenantID = %q, want tenant-x", w.Body.String())
+	}
+}
+
+func TestAuthMiddleware_NoTenantClaimLeavesTenantUnset(t *testing.T) {
+	t.Parallel()
+	mgr := newTestJWTManager(t)
+	token, _ := mgr.GenerateAccessToken("user-1") // no tenant claim
+
+	router := gin.New()
+	router.Use(ginmiddleware.AuthMiddleware(ginmiddleware.AuthConfig{Manager: mgr}))
+	router.GET("/", func(c *gin.Context) {
+		if _, ok := c.Get(ginmiddleware.ContextKeyTenantID); ok {
+			c.String(http.StatusInternalServerError, "tenantID should be unset")
+			return
+		}
+		c.Status(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestOptionalAuthMiddleware_SetsTenantID(t *testing.T) {
+	t.Parallel()
+	mgr := newTestJWTManager(t)
+	token, _ := mgr.GenerateAccessToken("opt-user", jwt.TokenOptions{TenantID: "tenant-y"})
+
+	router := gin.New()
+	router.Use(ginmiddleware.OptionalAuthMiddleware(ginmiddleware.AuthConfig{Manager: mgr}))
+	router.GET("/", func(c *gin.Context) {
+		tid, _ := c.Get(ginmiddleware.ContextKeyTenantID)
+		c.String(http.StatusOK, tid.(string))
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if w.Body.String() != "tenant-y" {
+		t.Errorf("tenantID = %q, want tenant-y", w.Body.String())
+	}
+}
+
 func TestAuthMiddleware_NoToken(t *testing.T) {
 	t.Parallel()
 	mgr := newTestJWTManager(t)

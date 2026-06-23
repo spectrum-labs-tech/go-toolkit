@@ -7,7 +7,8 @@
 // AuthMiddleware and OptionalAuthMiddleware verify JWT access tokens issued by
 // a [jwt.Manager]. They check the Authorization: Bearer header first, then fall
 // back to a named cookie. On success they set the "userID" context key so
-// downstream handlers can call c.GetString("userID").
+// downstream handlers can call c.GetString("userID"), and the "tenantID" key
+// when the token carries a "tenant_id" claim (absent otherwise).
 //
 // # CSRF
 //
