@@ -88,7 +88,7 @@ func (c *CookieConfig) withDefaults() CookieConfig {
 func SetAuthCookies(c *gin.Context, accessToken, refreshToken string, cfg CookieConfig) {
 	cfg = cfg.withDefaults()
 	c.Header("Cache-Control", "no-store")
-	http.SetCookie(c.Writer, &http.Cookie{		Name:     cfg.AccessTokenName,
+	http.SetCookie(c.Writer, &http.Cookie{Name: cfg.AccessTokenName,
 		Value:    accessToken,
 		Path:     "/",
 		MaxAge:   cfg.AccessTokenMaxAge,
@@ -97,7 +97,7 @@ func SetAuthCookies(c *gin.Context, accessToken, refreshToken string, cfg Cookie
 		SameSite: http.SameSiteLaxMode,
 	})
 	if refreshToken != "" {
-		http.SetCookie(c.Writer, &http.Cookie{			Name:     cfg.RefreshTokenName,
+		http.SetCookie(c.Writer, &http.Cookie{Name: cfg.RefreshTokenName,
 			Value:    refreshToken,
 			Path:     cfg.RefreshTokenPath,
 			MaxAge:   cfg.RefreshTokenMaxAge,
@@ -113,7 +113,7 @@ func SetAuthCookies(c *gin.Context, accessToken, refreshToken string, cfg Cookie
 // discards them on the next response.
 func ClearAuthCookies(c *gin.Context, cfg CookieConfig) {
 	cfg = cfg.withDefaults()
-	http.SetCookie(c.Writer, &http.Cookie{		Name:     cfg.AccessTokenName,
+	http.SetCookie(c.Writer, &http.Cookie{Name: cfg.AccessTokenName,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
@@ -121,7 +121,7 @@ func ClearAuthCookies(c *gin.Context, cfg CookieConfig) {
 		Secure:   cfg.Secure,
 		SameSite: http.SameSiteLaxMode,
 	})
-	http.SetCookie(c.Writer, &http.Cookie{		Name:     cfg.RefreshTokenName,
+	http.SetCookie(c.Writer, &http.Cookie{Name: cfg.RefreshTokenName,
 		Value:    "",
 		Path:     cfg.RefreshTokenPath,
 		MaxAge:   -1,

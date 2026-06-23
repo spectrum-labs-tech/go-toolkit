@@ -195,4 +195,3 @@ func TestSecureHeaders_WithPermissionsPolicy(t *testing.T) {
 		t.Errorf("Permissions-Policy = %q, want %q", got, "camera=(), microphone=()")
 	}
 }
-
