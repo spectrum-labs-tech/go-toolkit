@@ -35,6 +35,16 @@ linters:
           - gosec
           - noctx  # httptest.NewRequest without context is standard in tests
 
+      # G124 fires when the Secure field is set via a variable rather than a
+      # literal true. CookieConfig.Secure defaults to true (enforced by
+      # withDefaults) and WithSecure(false) is an explicit local-dev opt-out.
+      # gosec cannot prove this statically, so we suppress it here rather than
+      # scattering nolint directives across the call sites.
+      - path: pkg/ginmiddleware/cookies\.go
+        linters:
+          - gosec
+        text: "G124"
+
 issues:
   max-issues-per-linter: 50
   max-same-issues: 10
