@@ -2,7 +2,9 @@ package upload_test
 
 import (
 	"bytes"
+	"fmt"
 	"mime/multipart"
+	"net/textproto"
 	"testing"
 
 	"github.com/spectrum-labs-tech/go-toolkit/pkg/upload"
@@ -13,6 +15,40 @@ var pdfMagic = []byte("%PDF-1.4\n")
 
 // pngMagic is the PNG file signature.
 var pngMagic = []byte("\x89PNG\r\n\x1a\n")
+
+// makeHeaderWithContentType creates a multipart file header whose Content-Type
+// part header is explicitly set to contentType, simulating a browser or client
+// that labels the file with an alias or non-canonical MIME string.
+func makeHeaderWithContentType(t *testing.T, filename, contentType string, content []byte) *multipart.FileHeader {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filename))
+	h.Set("Content-Type", contentType)
+	fw, err := w.CreatePart(h)
+	if err != nil {
+		t.Fatalf("CreatePart: %v", err)
+	}
+	if _, err := fw.Write(content); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close multipart writer: %v", err)
+	}
+
+	mr := multipart.NewReader(&buf, w.Boundary())
+	form, err := mr.ReadForm(10 << 20)
+	if err != nil {
+		t.Fatalf("ReadForm: %v", err)
+	}
+	files := form.File["file"]
+	if len(files) == 0 {
+		t.Fatal("no file in parsed form")
+	}
+	return files[0]
+}
 
 func makeHeader(t *testing.T, filename string, content []byte) *multipart.FileHeader {
 	t.Helper()
@@ -25,7 +61,9 @@ func makeHeader(t *testing.T, filename string, content []byte) *multipart.FileHe
 	if _, err := fw.Write(content); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close multipart writer: %v", err)
+	}
 
 	mr := multipart.NewReader(&buf, w.Boundary())
 	form, err := mr.ReadForm(10 << 20)
@@ -95,6 +133,17 @@ func TestValidate_MultipleAllowedMIMEs(t *testing.T) {
 	}
 	if err := upload.Validate(pngHeader, opts...); err != nil {
 		t.Errorf("PNG in multi-allow list: unexpected error: %v", err)
+	}
+}
+
+func TestValidate_MIMEAlias_ByteSniffOverridesClientHeader(t *testing.T) {
+	t.Parallel()
+	// A client labels its PDF as "application/x-pdf" (a common alias).
+	// Byte sniffing detects "application/pdf", so AllowMIME("application/pdf")
+	// should accept it regardless of the client-supplied Content-Type header.
+	header := makeHeaderWithContentType(t, "doc.pdf", "application/x-pdf", pdfMagic)
+	if err := upload.Validate(header, upload.AllowMIME("application/pdf")); err != nil {
+		t.Errorf("PDF with x-pdf Content-Type should pass AllowMIME(application/pdf): %v", err)
 	}
 }
 

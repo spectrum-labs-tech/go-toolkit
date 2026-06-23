@@ -83,6 +83,31 @@ func TestCSV(t *testing.T) {
 	}
 }
 
+func TestCheck_AllSet(t *testing.T) {
+	t.Setenv("TOOLKIT_CHECK_A", "value-a")
+	t.Setenv("TOOLKIT_CHECK_B", "value-b")
+	if err := env.Check("TOOLKIT_CHECK_A", "TOOLKIT_CHECK_B"); err != nil {
+		t.Errorf("all set: unexpected error: %v", err)
+	}
+}
+
+func TestCheck_MissingReturnsError(t *testing.T) {
+	err := env.Check("TOOLKIT_CHECK_NOT_SET_XYZ")
+	if err == nil {
+		t.Error("expected error for missing key, got nil")
+	}
+}
+
+func TestCheck_ReportsAllMissing(t *testing.T) {
+	err := env.Check("TOOLKIT_CHECK_MISS_1", "TOOLKIT_CHECK_MISS_2")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "TOOLKIT_CHECK_MISS_1") || !strings.Contains(err.Error(), "TOOLKIT_CHECK_MISS_2") {
+		t.Errorf("error %q should name all missing keys", err.Error())
+	}
+}
+
 func TestRequire_AllSet(t *testing.T) {
 	t.Setenv("TOOLKIT_REQ_A", "value-a")
 	t.Setenv("TOOLKIT_REQ_B", "value-b")

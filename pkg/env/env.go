@@ -1,12 +1,16 @@
-// Package env provides typed helpers for reading environment variables with
-// fallback values. Each function reads the named variable at call time, so
-// changes made with os.Setenv between calls are reflected immediately.
+// Package env provides typed helpers for reading environment variables.
+// Each function reads the named variable at call time, so changes made with
+// os.Setenv between calls are reflected immediately.
 //
-// All helpers treat an empty string the same as an unset variable and return
-// the fallback in both cases.
+// Str, Int64, Duration, Bool, and CSV treat an empty string the same as an
+// unset variable and return the provided fallback in both cases.
+//
+// Check, Require, and MustStr are the exception: they panic or return an error
+// when a required variable is absent, rather than returning a fallback.
 package env
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -83,16 +87,16 @@ func CSV(key, fallback string) []string {
 	return out
 }
 
-// Require panics if any of the listed environment variables is unset or empty.
-// Call it early in main() to catch missing configuration before the application
-// serves traffic. The panic message names every missing key so all problems are
-// visible at once rather than one per restart.
+// Check reports whether any of the listed environment variables is unset or
+// empty. Returns an error naming every missing key, or nil if all are set.
+// Use Check when you want to handle the failure yourself (e.g. log then exit).
+// Use Require when a missing variable should immediately panic.
 //
-//	func main() {
-//	    env.Require("DATABASE_URL", "JWT_SECRET", "STRIPE_WEBHOOK_SECRET")
-//	    // ...
+//	if err := env.Check("DATABASE_URL", "JWT_SECRET"); err != nil {
+//	    slog.Error("missing configuration", "err", err)
+//	    os.Exit(1)
 //	}
-func Require(keys ...string) {
+func Check(keys ...string) error {
 	missing := make([]string, 0, len(keys))
 	for _, k := range keys {
 		if os.Getenv(k) == "" {
@@ -100,7 +104,23 @@ func Require(keys ...string) {
 		}
 	}
 	if len(missing) > 0 {
-		panic("required environment variables are not set: " + strings.Join(missing, ", "))
+		return fmt.Errorf("required environment variables are not set: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+// Require panics if any of the listed environment variables is unset or empty.
+// The panic value names every missing key so all problems are visible at once
+// rather than one per restart. Use Check instead when you need to handle the
+// error without panicking.
+//
+//	func main() {
+//	    env.Require("DATABASE_URL", "JWT_SECRET", "STRIPE_WEBHOOK_SECRET")
+//	    // ...
+//	}
+func Require(keys ...string) {
+	if err := Check(keys...); err != nil {
+		panic(err.Error())
 	}
 }
 

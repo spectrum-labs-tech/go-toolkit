@@ -41,12 +41,20 @@
 // IPRateLimit enforces per-IP token-bucket rate limits. Create a shared
 // RateLimiter with NewRateLimiter and pass it to IPRateLimit.
 //
+// # Request size limiting
+//
+// RequestSizeLimit caps the total request body size before the body is parsed.
+// It rejects requests whose declared Content-Length exceeds the limit and wraps
+// the body in http.MaxBytesReader to enforce the cap for chunked or
+// Content-Length-less requests. Mount it before any handler that reads the body.
+//
 // # Typical setup
 //
 //	mgr, _ := jwt.New(jwt.Config{...})
 //
 //	r := gin.New()
 //	r.Use(ginmiddleware.SecureHeaders())
+//	r.Use(ginmiddleware.RequestSizeLimit(50 << 20)) // 50 MB global cap
 //	r.Use(ginmiddleware.AuthMiddleware(ginmiddleware.AuthConfig{
 //	    Manager:           mgr,
 //	    AccessTokenCookie: "access_token",

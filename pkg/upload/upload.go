@@ -1,7 +1,7 @@
 // Package upload provides validation helpers for multipart file uploads.
-// It combines file size enforcement with actual MIME type detection — sniffing
-// the file's own bytes rather than trusting the browser-supplied Content-Type
-// header, which can be trivially spoofed.
+// It combines post-parse file size checks with actual MIME type detection —
+// sniffing the file's own bytes rather than trusting the browser-supplied
+// Content-Type header, which can be trivially spoofed.
 //
 // # Basic usage
 //
@@ -19,6 +19,26 @@
 // AllowMIME uses [github.com/gabriel-vasile/mimetype] to detect the file type
 // from its leading bytes. Only as many bytes as needed for detection are read
 // (typically 512 or fewer); the full file is not buffered.
+//
+// # DoS protection — layered approach required
+//
+// Validate operates on a [mime/multipart.FileHeader], which is produced after
+// the multipart body has been fully parsed and buffered (in memory or in a
+// temp file). MaxBytes is therefore a post-parse sanity check that catches
+// application-logic violations, not a guard against body exhaustion: an
+// attacker can stream a 10 GB body and fill disk before Validate is ever
+// called.
+//
+// Exhaustion protection must be applied before parsing. Use
+// ginmiddleware.RequestSizeLimit (or http.MaxBytesReader directly) to wrap the
+// request body and abort oversized requests before they hit the multipart
+// parser. A complete defence-in-depth setup also includes:
+//
+//   - Low router.MaxMultipartMemory (e.g. 32 MB) to bound in-memory buffering.
+//   - defer form.RemoveAll() after multipart parsing to clean up temp files.
+//   - *http.MaxBytesError detection in handlers to return 413 cleanly.
+//   - ReadHeaderTimeout and ReadTimeout on the http.Server to mitigate
+//     slow-upload (Slowloris-style) attacks.
 package upload
 
 import (
@@ -36,9 +56,13 @@ type validator struct {
 	allowedMIMEs []string
 }
 
-// MaxBytes sets the maximum permitted file size in bytes. Files larger than n
-// are rejected before the file is opened. No size limit is enforced when
-// MaxBytes is not provided.
+// MaxBytes sets the maximum permitted file size in bytes. This is a post-parse
+// sanity check: the multipart body is already buffered by the time Validate
+// runs, so MaxBytes alone does not protect against body-exhaustion attacks. For
+// exhaustion protection, wrap the request body with ginmiddleware.RequestSizeLimit
+// or http.MaxBytesReader before the multipart parser runs.
+//
+// No size limit is enforced when MaxBytes is not provided.
 func MaxBytes(n int64) Option {
 	return func(v *validator) { v.maxBytes = n }
 }
@@ -80,7 +104,7 @@ func Validate(header *multipart.FileHeader, opts ...Option) error {
 	if err != nil {
 		return fmt.Errorf("open file for MIME detection: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	detected, err := mimetype.DetectReader(f)
 	if err != nil {

@@ -1,6 +1,7 @@
 package ginmiddleware_test
 
 import (
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -140,6 +141,46 @@ func TestSecureHeaders_WithFrameOptionsEmpty(t *testing.T) {
 
 	if got := w.Header().Get("X-Frame-Options"); got != "" {
 		t.Errorf("X-Frame-Options should be absent, got %q", got)
+	}
+}
+
+func TestSecureHeaders_HSTSOnDirectTLS(t *testing.T) {
+	t.Parallel()
+	r := secureRouter()
+
+	// req.TLS != nil simulates a connection that terminated TLS at the app
+	// (no reverse proxy involved).
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.TLS = &tls.ConnectionState{}
+	r.ServeHTTP(w, req)
+
+	if got := w.Header().Get("Strict-Transport-Security"); got == "" {
+		t.Error("HSTS should be present when req.TLS is non-nil")
+	}
+}
+
+func TestSecureHeaders_WithFrameOptionsOverride(t *testing.T) {
+	t.Parallel()
+	r := secureRouter(ginmiddleware.WithFrameOptions("SAMEORIGIN"))
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if got := w.Header().Get("X-Frame-Options"); got != "SAMEORIGIN" {
+		t.Errorf("X-Frame-Options = %q, want SAMEORIGIN", got)
+	}
+}
+
+func TestSecureHeaders_WithReferrerPolicyOverride(t *testing.T) {
+	t.Parallel()
+	r := secureRouter(ginmiddleware.WithReferrerPolicy("no-referrer"))
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if got := w.Header().Get("Referrer-Policy"); got != "no-referrer" {
+		t.Errorf("Referrer-Policy = %q, want no-referrer", got)
 	}
 }
 
