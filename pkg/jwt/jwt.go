@@ -89,11 +89,16 @@ type Claims struct {
 }
 
 // TokenOptions carries optional per-token parameters. Pass a single TokenOptions
-// value to any Generate method; fields at their zero value are omitted from the
-// token. When multiple values are supplied only the first is used.
+// value to GenerateAccessToken or GenerateRefreshToken; fields at their zero
+// value are omitted from the token. When multiple values are supplied only the
+// first is used.
 type TokenOptions struct {
 	// TenantID is written as the "tenant_id" claim when non-empty. Tokens
 	// verified without a "tenant_id" claim return Claims.TenantID == "".
+	//
+	// The library writes and reads this claim but does not validate or enforce
+	// tenant isolation — it is the caller's responsibility to verify that the
+	// authenticated user belongs to the tenant in the token before granting access.
 	TenantID string
 }
 
@@ -157,9 +162,7 @@ func (m *Manager) GenerateAccessToken(subject string, opts ...TokenOptions) (str
 		"iss": m.cfg.Issuer,
 		"aud": []string{m.cfg.Audience},
 	}
-	if len(opts) > 0 && opts[0].TenantID != "" {
-		claims["tenant_id"] = opts[0].TenantID
-	}
+	applyOptions(claims, opts)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(m.cfg.Secret)
 }
@@ -189,9 +192,7 @@ func (m *Manager) GenerateRefreshToken(subject string, opts ...TokenOptions) (st
 		"aud":     []string{m.cfg.Audience},
 		"purpose": "refresh",
 	}
-	if len(opts) > 0 && opts[0].TenantID != "" {
-		claims["tenant_id"] = opts[0].TenantID
-	}
+	applyOptions(claims, opts)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(m.cfg.Secret)
 }
@@ -205,10 +206,13 @@ func (m *Manager) VerifyRefreshToken(tokenString string) (Claims, error) {
 
 // GenerateOAuthCode issues a short-lived OAuth authorization-code token for
 // subject. The code carries a unique JTI for replay detection; callers must
-// store and mark the JTI consumed on first use. Pass an optional TokenOptions
-// to include extra claims such as TenantID. Returns ErrMissingSubject if
+// store and mark the JTI consumed on first use. Returns ErrMissingSubject if
 // subject is empty.
-func (m *Manager) GenerateOAuthCode(subject string, opts ...TokenOptions) (string, error) {
+//
+// OAuth exchange codes are intentionally narrow: they carry only subject and
+// JTI. Mint the resulting access/refresh tokens with TokenOptions if tenant
+// context is needed after the exchange.
+func (m *Manager) GenerateOAuthCode(subject string) (string, error) {
 	if subject == "" {
 		return "", ErrMissingSubject
 	}
@@ -221,9 +225,6 @@ func (m *Manager) GenerateOAuthCode(subject string, opts ...TokenOptions) (strin
 		"iss":     m.cfg.Issuer,
 		"aud":     []string{m.cfg.Audience},
 		"purpose": "oauth_exchange",
-	}
-	if len(opts) > 0 && opts[0].TenantID != "" {
-		claims["tenant_id"] = opts[0].TenantID
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(m.cfg.Secret)
@@ -239,6 +240,17 @@ func (m *Manager) VerifyOAuthCode(tokenString string) (subject, jti string, err 
 		return "", "", err
 	}
 	return claims.Subject, claims.JTI, nil
+}
+
+// applyOptions writes non-zero fields from opts[0] into claims. It is a no-op
+// when opts is empty.
+func applyOptions(claims jwt.MapClaims, opts []TokenOptions) {
+	if len(opts) == 0 {
+		return
+	}
+	if opts[0].TenantID != "" {
+		claims["tenant_id"] = opts[0].TenantID
+	}
 }
 
 // parse is the shared validation path. If purpose is non-empty the "purpose"
