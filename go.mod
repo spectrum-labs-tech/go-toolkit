@@ -1,13 +1,13 @@
 module github.com/spectrum-labs-tech/go-toolkit
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
-	golang.org/x/time v0.15.0
+	golang.org/x/time v0.16.0
 )
 
 require (
